@@ -1,595 +1,469 @@
-import React, { useState } from 'react';
-import { 
-  Copy, 
-  Check, 
-  Sparkles, 
-  Tag, 
-  Package, 
-  Truck, 
-  Hash, 
-  Flame, 
-  ShieldCheck, 
-  Layers,
-  FileText,
-  Download,
-  Share2,
-  CheckCircle2,
-  ExternalLink,
-  Edit3
-} from 'lucide-react';
-import { GeneratedDescription, TargetMarketplace } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Header } from './components/Header';
+import { InputForm } from './components/InputForm';
+import { OutputDisplay } from './components/OutputDisplay';
+import { MarketplaceTips } from './components/MarketplaceTips';
+import { HistoryList } from './components/HistoryList';
+import { TargetMarketplace, ToneOfVoice, GeneratedDescription } from './types';
+import { Sparkles, CheckCircle2, User, LogOut, Lock, X } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
 
-interface OutputDisplayProps {
-  data: GeneratedDescription | null;
-  isLoading: boolean;
-}
+// ==========================================
+// ⚙️ KONFIGURASI KUNCI PROYEK ANDA
+// ==========================================
+const SUPABASE_URL = "https://rrwjmcmrkbplnwtgzyfv.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_2748X2cPhj_GjSmtrSzN0A_OBdj0dCv";
+const GROQ_API_KEY = "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";
+const MAYAR_PAYMENT_LINK = "https://copywriting-for-umkm.myr.id/pl/copywriting-generator-for-product-marketplace";
+// ==========================================
 
-export const OutputDisplay: React.FC<OutputDisplayProps> = ({ data, isLoading }) => {
-  const [copiedSection, setCopiedSection] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'structured' | 'raw'>('structured');
-  const [customText, setCustomText] = useState<string>('');
-  const [isEditing, setIsEditing] = useState<boolean>(false);
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const STORAGE_KEY = 'penyusun_marketplace_history';
 
-  // Synchronize customText when new data arrives
-  React.useEffect(() => {
-    if (data?.fullFormattedCopy) {
-      setCustomText(data.fullFormattedCopy);
-      setIsEditing(false);
-    }
-  }, [data]);
+export default function App() {
+  const [productName, setProductName] = useState<string>('');
+  const [specifications, setSpecifications] = useState<string>('');
+  const [marketplace, setMarketplace] = useState<TargetMarketplace>('Shopee');
+  const [tone, setTone] = useState<ToneOfVoice>('Santai & Gaul');
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [generatedResult, setGeneratedResult] = useState<GeneratedDescription | null>(null);
+  const [history, setHistory] = useState<GeneratedDescription[]>([]);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const copyToClipboard = async (text: string, sectionId: string) => {
+  // Auth & Subscription State
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [userProfile, setUserProfile] = useState<any>(null);
+  const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
+  const [isRegisterMode, setIsRegisterMode] = useState<boolean>(false);
+  const [authEmail, setAuthEmail] = useState<string>('');
+  const [authPassword, setAuthPassword] = useState<string>('');
+  const [authLoading, setAuthLoading] = useState<boolean>(false);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setCurrentUser(session.user);
+        fetchProfile(session.user.id);
+      }
+    });
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setCurrentUser(session.user);
+        fetchProfile(session.user.id);
+      } else {
+        setCurrentUser(null);
+        setUserProfile(null);
+      }
+    });
+
     try {
-      await navigator.clipboard.writeText(text);
-      setCopiedSection(sectionId);
-      setTimeout(() => {
-        setCopiedSection(null);
-      }, 2000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setHistory(parsed);
+          setGeneratedResult(parsed[0]);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load history', e);
+    }
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
+
+  const fetchProfile = async (userId: string) => {
+    const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
+    if (data) setUserProfile(data);
+  };
+
+  const handleAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!authEmail || !authPassword) {
+      showToast('Email dan Password wajib diisi.');
+      return;
+    }
+    setAuthLoading(true);
+    try {
+      if (isRegisterMode) {
+        const { error } = await supabase.auth.signUp({ email: authEmail, password: authPassword });
+        if (error) throw error;
+        showToast('Pendaftaran berhasil! Silakan login.');
+        setIsRegisterMode(false);
+      } else {
+        const { data, error } = await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword });
+        if (error) throw error;
+        setCurrentUser(data.user);
+        await fetchProfile(data.user.id);
+        setShowAuthModal(false);
+        showToast('Berhasil masuk!');
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Gagal autentikasi');
+    } finally {
+      setAuthLoading(false);
     }
   };
 
-  const downloadAsTxt = () => {
-    if (!data) return;
-    const content = customText || data.fullFormattedCopy;
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `Deskripsi-${data.productName.replace(/[^a-zA-Z0-9]/g, '_')}-${data.marketplace}.txt`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setCurrentUser(null);
+    setUserProfile(null);
+    showToast('Berhasil keluar.');
   };
 
-  const getMarketplaceBadgeColor = (marketplace: TargetMarketplace) => {
-    switch (marketplace) {
-      case 'Shopee':
-        return 'bg-amber-50 text-amber-700 border-amber-200';
-      case 'Tokopedia':
-        return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-      case 'TikTok Shop':
-        return 'bg-rose-50 text-rose-700 border-rose-200';
-      case 'Lazada':
-        return 'bg-blue-50 text-blue-700 border-blue-200';
-      default:
-        return 'bg-indigo-50 text-indigo-700 border-indigo-200';
+  const saveToHistory = (newEntry: GeneratedDescription) => {
+    setHistory((prev) => {
+      const filtered = prev.filter((item) => item.productName !== newEntry.productName || item.marketplace !== newEntry.marketplace);
+      const updated = [newEntry, ...filtered].slice(0, 10);
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      } catch (e) {
+        console.warn('Failed to save history', e);
+      }
+      return updated;
+    });
+  };
+
+  const handleClearHistory = () => {
+    setHistory([]);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch (e) {
+      console.warn(e);
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-8 flex flex-col items-center justify-center min-h-[480px] text-center">
-        <div className="relative mb-6">
-          <div className="w-16 h-16 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center animate-pulse">
-            <Sparkles className="w-8 h-8 text-indigo-600 animate-spin" />
-          </div>
-          <div className="absolute -inset-1 rounded-2xl bg-indigo-500/20 blur-md -z-10 animate-pulse"></div>
-        </div>
-        <h3 className="text-lg font-bold text-slate-900 mb-2">
-          Sedang Menyusun Copywriting Marketplace...
-        </h3>
-        <p className="text-sm text-slate-500 max-w-md mb-6">
-          AI sedang menganalisis spesifikasi, merumuskan judul SEO, mengubah fitur menjadi manfaat penjualan, dan merapikan format untuk marketplace target.
-        </p>
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 3000);
+  };
 
-        {/* Skeleton lines */}
-        <div className="w-full max-w-lg space-y-3">
-          <div className="h-4 bg-slate-100 rounded-md animate-pulse w-3/4 mx-auto"></div>
-          <div className="h-4 bg-slate-100 rounded-md animate-pulse w-5/6 mx-auto"></div>
-          <div className="h-4 bg-slate-100 rounded-md animate-pulse w-2/3 mx-auto"></div>
-        </div>
-      </div>
-    );
-  }
+  const handleResetForm = () => {
+    setProductName('');
+    setSpecifications('');
+    setError(null);
+  };
 
-  if (!data) {
-    return (
-      <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-8 sm:p-12 flex flex-col items-center justify-center min-h-[480px] text-center">
-        <div className="w-16 h-16 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mb-4">
-          <FileText className="w-8 h-8" />
-        </div>
-        <h3 className="text-base sm:text-lg font-bold text-slate-800 mb-1.5">
-          Belum Ada Deskripsi yang Dihasilkan
-        </h3>
-        <p className="text-xs sm:text-sm text-slate-500 max-w-md mb-6 leading-relaxed">
-          Isi nama produk dan spesifikasi pada formulir di sebelah kiri, pilih target marketplace, lalu klik tombol <strong className="text-indigo-600">"Buat Deskripsi Produk"</strong> untuk menghasilkan copywriting terstruktur berkonversi tinggi.
-        </p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-w-md text-left text-xs text-slate-600">
-          <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-            <span className="font-semibold text-slate-800 block mb-0.5">1. Judul SEO</span>
-            2 opsi nama produk kata kunci padat
-          </div>
-          <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-            <span className="font-semibold text-slate-800 block mb-0.5">2. Hook Memikat</span>
-            Pembuka yang menarik minat beli
-          </div>
-          <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-            <span className="font-semibold text-slate-800 block mb-0.5">3. Manfaat Nyata</span>
-            Spesifikasi diubah jadi solusi
-          </div>
-          <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-            <span className="font-semibold text-slate-800 block mb-0.5">4. Isi Paket</span>
-            Daftar kelengkapan produk
-          </div>
-          <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-            <span className="font-semibold text-slate-800 block mb-0.5">5. Ketentuan Toko</span>
-            Jadwal kirim & garansi unboxing
-          </div>
-          <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-            <span className="font-semibold text-slate-800 block mb-0.5">6. Hashtag Viral</span>
-            5-8 rekomendasi tag relevan
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const handleGenerate = async () => {
+    if (!currentUser) {
+      setShowAuthModal(true);
+      setError('Silakan Login atau Daftar akun gratis terlebih dahulu.');
+      return;
+    }
 
-  const activeCopyText = customText || data.fullFormattedCopy;
+    const isPro = userProfile?.is_subscribed;
+    const credits = userProfile?.free_credits ?? 0;
+
+    if (!isPro && credits <= 0) {
+      setError('Kuota coba gratis Anda telah habis. Silakan klik tombol Upgrade PRO di atas.');
+      return;
+    }
+
+    if (!productName.trim()) {
+      setError('Harap masukkan Nama Produk & Merek.');
+      return;
+    }
+    if (!specifications.trim()) {
+      setError('Harap masukkan Spesifikasi / Bahan / Fitur Produk.');
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    const systemPrompt = `Anda adalah Copywriter E-commerce dan Pakar SEO Marketplace profesional (Shopee, Tokopedia, TikTok Shop, Lazada).
+Tugas Anda adalah mengubah data spesifikasi produk menjadi konten copywriting persuasif siap pakai.
+
+Format balasan WAJIB berupa JSON murni dengan struktur berikut:
+{
+  "titleOptions": ["Judul SEO Opsi 1", "Judul SEO Opsi 2"],
+  "hook": "Kalimat pembuka/hook persuasif yang memikat pembeli dalam 2-3 kalimat",
+  "keyBenefits": [
+    {"feature": "Fitur/Bahan 1", "benefit": "Manfaat nyata bagi pembeli"},
+    {"feature": "Fitur/Bahan 2", "benefit": "Manfaat nyata bagi pembeli"},
+    {"feature": "Fitur/Bahan 3", "benefit": "Manfaat nyata bagi pembeli"}
+  ],
+  "packageContents": ["1x Unit Produk Utama", "1x Dus/Kemasan Eksklusif"],
+  "shippingAndNotes": [
+    "Pesanan sebelum pukul 15.00 WIB dikirim pada hari yang sama.",
+    "Wajib menyertakan video unboxing utuh untuk klaim garansi retur."
+  ],
+  "hashtags": ["#tag1", "#tag2", "#tag3", "#tag4", "#tag5", "#tag6"]
+}`;
+
+    const userPrompt = `Nama Produk: ${productName.trim()}\nSpesifikasi/Bahan: ${specifications.trim()}\nMarketplace Tujuan: ${marketplace}\nGaya Bahasa: ${tone}`;
+
+    try {
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${GROQ_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: "openai/gpt-oss-120b",
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt }
+          ],
+          temperature: 0.5,
+          response_format: { type: "json_object" }
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.error) {
+        throw new Error(result.error.message || 'Gagal memproses ke AI.');
+      }
+
+      const contentString = result.choices?.[0]?.message?.content;
+      if (!contentString) {
+        throw new Error('Respon dari AI kosong.');
+      }
+
+      let parsed: any;
+      try {
+        parsed = JSON.parse(contentString);
+      } catch {
+        const cleaned = contentString.replace(/```json/g, '').replace(/```/g, '').trim();
+        parsed = JSON.parse(cleaned);
+      }
+
+      const titles = Array.isArray(parsed.titleOptions) && parsed.titleOptions.length > 0 
+        ? parsed.titleOptions 
+        : [`${productName} Premium Original Quality`, `Promo ${productName} - Garansi & Fast Delivery`];
+
+      const hookText = parsed.hook || `Dapatkan ${productName} kualitas terbaik dengan performa maksimal untuk melengkapi kebutuhan harian Anda!`;
+
+      const benefits = Array.isArray(parsed.keyBenefits) && parsed.keyBenefits.length > 0
+        ? parsed.keyBenefits
+        : [{ feature: "Kualitas Premium", benefit: "Awet, nyaman, dan tahan lama untuk penggunaan harian" }];
+
+      const packages = Array.isArray(parsed.packageContents) && parsed.packageContents.length > 0
+        ? parsed.packageContents
+        : ["1x Unit Produk", "1x Dus / Kemasan Pelindung"];
+
+      const shipping = Array.isArray(parsed.shippingAndNotes) && parsed.shippingAndNotes.length > 0
+        ? parsed.shippingAndNotes
+        : ["Pengiriman cepat setiap hari kerja.", "Wajib rekam video unboxing saat paket tiba."];
+
+      const tags = Array.isArray(parsed.hashtags) && parsed.hashtags.length > 0
+        ? parsed.hashtags
+        : [`#${productName.replace(/\\s+/g, '')}`, `#${marketplace.replace(/\\s+/g, '')}`, '#belanjaonline', '#racuntoko'];
+
+      // Format teks mentah rapi siap salin
+      const rawText = `${titles[0]}
+
+${hookText}
+
+✨ KEUNGGULAN & SPESIFIKASI:
+${benefits.map((b: any) => `• ${b.feature}: ${b.benefit}`).join('\n')}
+
+📦 KELENGKAPAN PAKET:
+${packages.map((p: string) => `• ${p}`).join('\n')}
+
+🚚 KETENTUAN PENGIRIMAN & GARANSI:
+${shipping.map((s: string) => `• ${s}`).join('\n')}
+
+${tags.join(' ')}`;
+
+      const generatedData: GeneratedDescription = {
+        productName: productName.trim(),
+        marketplace,
+        tone,
+        generatedAt: new Date().toISOString(),
+        titleOptions: titles,
+        hook: hookText,
+        keyBenefits: benefits,
+        packageContents: packages,
+        shippingAndNotes: shipping,
+        hashtags: tags,
+        fullFormattedCopy: rawText
+      };
+
+      setGeneratedResult(generatedData);
+      saveToHistory(generatedData);
+      showToast('Deskripsi produk berhasil disusun!');
+
+      if (!isPro && credits > 0) {
+        const newCredits = credits - 1;
+        await supabase.from('profiles').update({ free_credits: newCredits }).eq('id', currentUser.id);
+        setUserProfile((prev: any) => ({ ...prev, free_credits: newCredits }));
+      }
+    } catch (err: any) {
+      console.error('Generation failed:', err);
+      setError(err.message || 'Terjadi kesalahan saat memproses deskripsi.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const isPro = userProfile?.is_subscribed;
+  const credits = userProfile?.free_credits ?? 0;
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-xs flex flex-col overflow-hidden">
-      {/* Top Banner & Main Action Bar */}
-      <div className="p-4 sm:p-5 border-b border-slate-200 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${getMarketplaceBadgeColor(data.marketplace)}`}>
-              {data.marketplace}
-            </span>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-200/80 text-slate-700">
-              Gaya: {data.tone}
-            </span>
-            <span className="text-xs text-slate-400">
-              {data.generatedAt ? new Date(data.generatedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : ''}
-            </span>
-          </div>
-          <h2 className="text-base sm:text-lg font-bold text-slate-900 line-clamp-1">
-            Hasil Copywriting: {data.productName}
-          </h2>
+    <div className="min-h-screen bg-slate-50 flex flex-col selection:bg-indigo-100 selection:text-indigo-900">
+      {toastMessage && (
+        <div className="fixed bottom-5 right-5 z-50 bg-slate-900 text-white text-xs sm:text-sm font-semibold px-4 py-2.5 rounded-xl shadow-lg flex items-center gap-2 animate-bounce">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+          <span>{toastMessage}</span>
         </div>
+      )}
 
-        {/* Global Action Buttons */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* View Mode Switcher */}
-          <div className="bg-white border border-slate-200 rounded-xl p-0.5 flex text-xs font-semibold text-slate-600 shadow-2xs">
-            <button
-              type="button"
-              onClick={() => setViewMode('structured')}
-              className={`px-3 py-1.5 rounded-lg transition-all ${
-                viewMode === 'structured' 
-                  ? 'bg-indigo-600 text-white shadow-xs' 
-                  : 'hover:text-slate-900 hover:bg-slate-50'
-              }`}
-            >
-              Terstruktur
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('raw')}
-              className={`px-3 py-1.5 rounded-lg transition-all ${
-                viewMode === 'raw' 
-                  ? 'bg-indigo-600 text-white shadow-xs' 
-                  : 'hover:text-slate-900 hover:bg-slate-50'
-              }`}
-            >
-              Teks Mentah
-            </button>
-          </div>
-
-          <button
-            type="button"
-            onClick={downloadAsTxt}
-            className="p-2 rounded-xl text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 text-xs font-semibold inline-flex items-center gap-1.5 shadow-2xs transition-colors"
-            title="Unduh format .txt"
-          >
-            <Download className="w-4 h-4 text-slate-600" />
-            <span className="hidden md:inline">Unduh .txt</span>
-          </button>
-
-          {/* Primary "Salin Teks" Button */}
-          <button
-            id="btn-copy-full-text"
-            type="button"
-            onClick={() => copyToClipboard(activeCopyText, 'full')}
-            className="px-4 py-2 rounded-xl font-bold text-xs sm:text-sm text-white bg-indigo-600 hover:bg-indigo-700 active:scale-95 shadow-sm inline-flex items-center gap-1.5 transition-all cursor-pointer"
-          >
-            {copiedSection === 'full' ? (
-              <>
-                <Check className="w-4 h-4 text-emerald-300" />
-                <span>Tersalin ke Clipboard!</span>
-              </>
+      {/* Header */}
+      <div className="bg-white border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between">
+          <Header />
+          <div className="flex items-center gap-3">
+            {currentUser ? (
+              <div className="flex items-center gap-3 bg-slate-50 px-3.5 py-1.5 rounded-xl border border-slate-200">
+                <div className="text-right">
+                  <div className="text-xs font-semibold text-slate-700">{currentUser.email}</div>
+                  <div className={`text-[11px] font-bold ${isPro ? 'text-emerald-600' : 'text-amber-600'}`}>
+                    {isPro ? '🌟 Member PRO (Unlimited)' : `Sisa Kuota: ${credits}x`}
+                  </div>
+                </div>
+                <button onClick={handleLogout} title="Logout" className="p-1.5 hover:bg-slate-200 rounded-lg text-slate-500 transition">
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
             ) : (
-              <>
-                <Copy className="w-4 h-4" />
-                <span>Salin Teks Lengkap</span>
-              </>
+              <button onClick={() => setShowAuthModal(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2 rounded-xl transition flex items-center gap-1.5 shadow-xs">
+                <User className="w-3.5 h-3.5" />
+                Login / Daftar Akun
+              </button>
             )}
-          </button>
+          </div>
         </div>
       </div>
 
-      {/* Main Content Area */}
-      <div className="p-5 sm:p-6 lg:p-7 flex-1 space-y-6">
-        {viewMode === 'raw' ? (
-          /* Raw / Seller Center Ready Textarea View */
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-slate-700">
-                  Teks Siap Salin ke Seller Center ({data.marketplace})
-                </span>
-                {isEditing && (
-                  <span className="text-[11px] px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-medium">
-                    Mode Edit Aktif
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-500">
-                  {activeCopyText.length} Karakter · {activeCopyText.split(/\s+/).filter(Boolean).length} Kata
-                </span>
-              </div>
+      {/* Container */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        {currentUser && !isPro && credits <= 0 && (
+          <div className="mb-6 bg-gradient-to-r from-amber-500 to-orange-500 text-white p-5 rounded-2xl shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <h3 className="font-bold text-lg flex items-center gap-2">
+                <Lock className="w-5 h-5" /> Kuota Gratis Anda Telah Habis!
+              </h3>
+              <p className="text-xs text-amber-100">Upgrade ke Paket PRO untuk membuat deskripsi e-commerce tanpa batas sepuasnya.</p>
             </div>
+            <a href={MAYAR_PAYMENT_LINK} target="_blank" rel="noreferrer" className="bg-white text-orange-600 hover:bg-orange-50 font-bold text-xs px-5 py-3 rounded-xl text-center transition shadow-xs">
+              Upgrade PRO (Rp29.000/bln)
+            </a>
+          </div>
+        )}
 
-            <div className="relative">
-              <textarea
-                value={customText}
-                onChange={(e) => {
-                  setCustomText(e.target.value);
-                  setIsEditing(true);
-                }}
-                rows={18}
-                className="w-full font-mono text-xs sm:text-sm bg-slate-900 text-slate-100 p-4 rounded-xl border border-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none leading-relaxed resize-y select-all"
-                placeholder="Teks deskripsi..."
-              />
-            </div>
-            
-            <div className="flex items-center justify-between pt-1">
-              <p className="text-xs text-slate-500">
-                💡 Anda dapat mengedit teks di atas secara langsung sebelum menyalin.
-              </p>
-              <button
-                type="button"
-                onClick={() => copyToClipboard(activeCopyText, 'raw-full')}
-                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold inline-flex items-center gap-1.5 shadow-xs transition-colors"
-              >
-                {copiedSection === 'raw-full' ? (
-                  <>
-                    <Check className="w-3.5 h-3.5 text-emerald-300" />
-                    <span>Tersalin!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-3.5 h-3.5" />
-                    <span>Salin Teks Ini</span>
-                  </>
-                )}
+        <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-gradient-to-r from-indigo-900 via-indigo-800 to-violet-900 rounded-2xl p-5 text-white shadow-xs">
+          <div>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-white/10 text-indigo-200 backdrop-blur-xs mb-2">
+              <Sparkles className="w-3.5 h-3.5 text-indigo-300" />
+              Marketplace SEO & High-Converting Copy
+            </span>
+            <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight">
+              Penyusun Deskripsi Produk Otomatis
+            </h2>
+            <p className="text-xs sm:text-sm text-indigo-100/90 mt-1 max-w-2xl">
+              Ubah rincian spesifikasi teknis menjadi copywriting persuasif siap salin untuk Shopee, Tokopedia, TikTok Shop, dan Lazada dengan struktur SEO standar marketplace.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3 shrink-0 self-start md:self-center">
+            <a href={MAYAR_PAYMENT_LINK} target="_blank" rel="noreferrer" className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition shadow-xs">
+              🌟 Beli Paket PRO
+            </a>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          <div className="lg:col-span-5 space-y-6">
+            <InputForm
+              productName={productName}
+              setProductName={setProductName}
+              specifications={specifications}
+              setSpecifications={setSpecifications}
+              marketplace={marketplace}
+              setMarketplace={setMarketplace}
+              tone={tone}
+              setTone={setTone}
+              onSubmit={handleGenerate}
+              isLoading={isLoading}
+              onReset={handleResetForm}
+              error={error}
+            />
+
+            <HistoryList
+              history={history}
+              onSelect={(item) => {
+                setGeneratedResult(item);
+                setProductName(item.productName);
+                setMarketplace(item.marketplace);
+                setTone(item.tone);
+              }}
+              onClear={handleClearHistory}
+              activeItem={generatedResult}
+            />
+
+            <MarketplaceTips currentMarketplace={marketplace} />
+          </div>
+
+          <div className="lg:col-span-7">
+            <OutputDisplay
+              data={generatedResult}
+              isLoading={isLoading}
+            />
+          </div>
+        </div>
+      </main>
+
+      {/* Auth Modal */}
+      {showAuthModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white max-w-sm w-full p-6 rounded-2xl shadow-xl border border-slate-100 relative">
+            <button onClick={() => setShowAuthModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
+              <X className="w-5 h-5" />
+            </button>
+            <h3 className="text-lg font-bold text-slate-800 mb-1">{isRegisterMode ? 'Daftar Akun Baru' : 'Login Akun'}</h3>
+            <p className="text-xs text-slate-500 mb-4">{isRegisterMode ? 'Dapatkan 3x kuota gratis untuk mencoba fitur.' : 'Masuk untuk mengakses kuota dan status PRO Anda.'}</p>
+            <form onSubmit={handleAuthSubmit} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Email</label>
+                <input type="email" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} required placeholder="nama@email.com" className="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-400" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Password</label>
+                <input type="password" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} required placeholder="Minimal 6 karakter" className="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-400" />
+              </div>
+              <button type="submit" disabled={authLoading} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl transition text-sm">
+                {authLoading ? 'Memproses...' : isRegisterMode ? 'Daftar Sekarang' : 'Masuk'}
+              </button>
+            </form>
+            <div className="text-center mt-3">
+              <button type="button" onClick={() => setIsRegisterMode(!isRegisterMode)} className="text-xs text-indigo-600 hover:underline">
+                {isRegisterMode ? 'Sudah punya akun? Masuk di sini' : 'Belum punya akun? Daftar gratis'}
               </button>
             </div>
           </div>
-        ) : (
-          /* Structured Visual Breakdown of the 6 Required Elements */
-          <div className="space-y-6">
-            {/* Section 1: Rekomendasi Judul Produk SEO-friendly (2 Opsi) */}
-            <div className="bg-slate-50/90 rounded-xl p-4 sm:p-5 border border-slate-200">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-md bg-amber-500 text-white flex items-center justify-center text-xs font-bold">
-                    1
-                  </div>
-                  <h3 className="font-bold text-slate-900 text-sm sm:text-base">
-                    Rekomendasi Judul Produk SEO-friendly (2 Opsi)
-                  </h3>
-                </div>
-                <span className="text-[11px] text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">
-                  Target: {data.marketplace} SEO
-                </span>
-              </div>
-
-              <div className="space-y-2.5">
-                {data.titleOptions?.map((title, idx) => (
-                  <div
-                    key={idx}
-                    className="p-3.5 bg-white rounded-xl border border-slate-200 hover:border-indigo-300 hover:shadow-2xs transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
-                  >
-                    <div className="flex items-start gap-2.5 flex-1">
-                      <span className="text-xs font-bold text-indigo-600 px-2 py-0.5 bg-indigo-50 rounded mt-0.5">
-                        Opsi {idx + 1}
-                      </span>
-                      <div className="flex-1">
-                        <p className="text-sm font-semibold text-slate-800 select-all">
-                          {title}
-                        </p>
-                        <span className="text-[11px] text-slate-400 mt-0.5 block">
-                          {title.length} karakter · Optimasi kata kunci pencarian
-                        </span>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => copyToClipboard(title, `title-${idx}`)}
-                      className="shrink-0 self-end sm:self-center px-3 py-1.5 rounded-lg text-xs font-medium text-slate-700 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 border border-slate-200 hover:border-indigo-200 inline-flex items-center gap-1.5 transition-all"
-                    >
-                      {copiedSection === `title-${idx}` ? (
-                        <>
-                          <Check className="w-3.5 h-3.5 text-emerald-600" />
-                          <span className="text-emerald-700 font-semibold">Tersalin!</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3.5 h-3.5" />
-                          <span>Salin Judul</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Section 2: Hook / Pembuka Menarik */}
-            <div className="bg-slate-50/90 rounded-xl p-4 sm:p-5 border border-slate-200">
-              <div className="flex items-center justify-between mb-2.5">
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-md bg-rose-500 text-white flex items-center justify-center text-xs font-bold">
-                    2
-                  </div>
-                  <h3 className="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-1.5">
-                    <Flame className="w-4 h-4 text-rose-500" />
-                    Hook / Pembuka Menarik
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => copyToClipboard(data.hook, 'hook')}
-                  className="px-2.5 py-1 rounded-lg text-xs font-medium text-slate-700 bg-white hover:bg-indigo-50 hover:text-indigo-700 border border-slate-200 inline-flex items-center gap-1 transition-all"
-                >
-                  {copiedSection === 'hook' ? (
-                    <>
-                      <Check className="w-3.5 h-3.5 text-emerald-600" />
-                      <span className="text-emerald-700">Tersalin</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3.5 h-3.5" />
-                      <span>Salin Hook</span>
-                    </>
-                  )}
-                </button>
-              </div>
-              <div className="p-3.5 bg-white rounded-xl border border-slate-200 text-sm text-slate-700 leading-relaxed italic select-all">
-                "{data.hook}"
-              </div>
-            </div>
-
-            {/* Section 3: Poin Keunggulan Utama (Spesifikasi diubah jadi Manfaat) */}
-            <div className="bg-slate-50/90 rounded-xl p-4 sm:p-5 border border-slate-200">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-md bg-emerald-600 text-white flex items-center justify-center text-xs font-bold">
-                    3
-                  </div>
-                  <h3 className="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-1.5">
-                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                    Poin Keunggulan Utama (Spesifikasi Jadi Manfaat)
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const text = data.keyBenefits
-                      .map((b) => `• ${b.feature}: ${b.benefit}`)
-                      .join('\n');
-                    copyToClipboard(text, 'benefits');
-                  }}
-                  className="px-2.5 py-1 rounded-lg text-xs font-medium text-slate-700 bg-white hover:bg-indigo-50 hover:text-indigo-700 border border-slate-200 inline-flex items-center gap-1 transition-all"
-                >
-                  {copiedSection === 'benefits' ? (
-                    <>
-                      <Check className="w-3.5 h-3.5 text-emerald-600" />
-                      <span className="text-emerald-700">Tersalin</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3.5 h-3.5" />
-                      <span>Salin Poin</span>
-                    </>
-                  )}
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 gap-2.5">
-                {data.keyBenefits?.map((item, idx) => (
-                  <div
-                    key={idx}
-                    className="p-3 bg-white rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-baseline gap-2"
-                  >
-                    <div className="font-semibold text-xs text-slate-900 sm:w-1/3 shrink-0 flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
-                      <span>{item.feature}</span>
-                    </div>
-                    <div className="text-xs sm:text-sm text-slate-600 sm:w-2/3 flex items-start gap-1.5">
-                      <span className="text-emerald-600 font-bold hidden sm:inline">➜</span>
-                      <span>{item.benefit}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* 2-Column Row for Packaging & Shipping/Notes */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Section 4: Kelengkapan Paket */}
-              <div className="bg-slate-50/90 rounded-xl p-4 sm:p-5 border border-slate-200">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-md bg-indigo-600 text-white flex items-center justify-center text-xs font-bold">
-                      4
-                    </div>
-                    <h3 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
-                      <Package className="w-4 h-4 text-indigo-600" />
-                      Kelengkapan Paket
-                    </h3>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const text = data.packageContents.map((p) => `• ${p}`).join('\n');
-                      copyToClipboard(text, 'package');
-                    }}
-                    className="px-2 py-1 rounded text-xs text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 inline-flex items-center gap-1"
-                  >
-                    {copiedSection === 'package' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                    <span>Salin</span>
-                  </button>
-                </div>
-                <ul className="space-y-1.5 bg-white p-3 rounded-xl border border-slate-200 text-xs sm:text-sm text-slate-700">
-                  {data.packageContents?.map((item, idx) => (
-                    <li key={idx} className="flex items-center gap-2">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* Section 5: Ketentuan Pengiriman & Catatan */}
-              <div className="bg-slate-50/90 rounded-xl p-4 sm:p-5 border border-slate-200">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-md bg-blue-600 text-white flex items-center justify-center text-xs font-bold">
-                      5
-                    </div>
-                    <h3 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
-                      <Truck className="w-4 h-4 text-blue-600" />
-                      Ketentuan & Catatan
-                    </h3>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const text = data.shippingAndNotes.map((s) => `• ${s}`).join('\n');
-                      copyToClipboard(text, 'shipping');
-                    }}
-                    className="px-2 py-1 rounded text-xs text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 inline-flex items-center gap-1"
-                  >
-                    {copiedSection === 'shipping' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                    <span>Salin</span>
-                  </button>
-                </div>
-                <ul className="space-y-1.5 bg-white p-3 rounded-xl border border-slate-200 text-xs sm:text-sm text-slate-700">
-                  {data.shippingAndNotes?.map((item, idx) => (
-                    <li key={idx} className="flex items-start gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5 shrink-0"></span>
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-
-            {/* Section 6: Rekomendasi 5-8 Hashtag Relevan */}
-            <div className="bg-slate-50/90 rounded-xl p-4 sm:p-5 border border-slate-200">
-              <div className="flex items-center justify-between mb-2.5">
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-md bg-violet-600 text-white flex items-center justify-center text-xs font-bold">
-                    6
-                  </div>
-                  <h3 className="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-1.5">
-                    <Hash className="w-4 h-4 text-violet-600" />
-                    Rekomendasi Hashtag Relevan ({data.hashtags?.length || 0})
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const text = data.hashtags.join(' ');
-                    copyToClipboard(text, 'hashtags');
-                  }}
-                  className="px-2.5 py-1 rounded-lg text-xs font-medium text-slate-700 bg-white hover:bg-indigo-50 hover:text-indigo-700 border border-slate-200 inline-flex items-center gap-1 transition-all"
-                >
-                  {copiedSection === 'hashtags' ? (
-                    <>
-                      <Check className="w-3.5 h-3.5 text-emerald-600" />
-                      <span className="text-emerald-700 font-semibold">Tersalin!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3.5 h-3.5" />
-                      <span>Salin Semua Hashtag</span>
-                    </>
-                  )}
-                </button>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                {data.hashtags?.map((tag, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => copyToClipboard(tag, `tag-${idx}`)}
-                    className="px-3 py-1 bg-white hover:bg-violet-50 text-violet-700 border border-violet-200 rounded-lg text-xs font-medium transition-all inline-flex items-center gap-1 shadow-2xs hover:scale-105"
-                    title="Klik untuk menyalin hashtag ini"
-                  >
-                    <span>{tag}</span>
-                    {copiedSection === `tag-${idx}` && (
-                      <Check className="w-3 h-3 text-emerald-600" />
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Bottom Sticky Action Footer */}
-      <div className="p-4 bg-slate-100/90 border-t border-slate-200 flex items-center justify-between flex-wrap gap-3">
-        <div className="text-xs text-slate-600 flex items-center gap-1.5">
-          <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-          <span>Hasil teroptimasi algoritma pencarian <strong>{data.marketplace}</strong>.</span>
         </div>
+      )}
 
-        <button
-          type="button"
-          onClick={() => copyToClipboard(activeCopyText, 'full-bottom')}
-          className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs sm:text-sm font-bold inline-flex items-center gap-2 shadow-sm transition-all cursor-pointer"
-        >
-          {copiedSection === 'full-bottom' ? (
-            <>
-              <Check className="w-4 h-4 text-emerald-300" />
-              <span>Deskripsi Lengkap Tersalin!</span>
-            </>
-          ) : (
-            <>
-              <Copy className="w-4 h-4" />
-              <span>Salin Teks Lengkap</span>
-            </>
-          )}
-        </button>
-      </div>
+      <footer className="border-t border-slate-200 bg-white py-4 mt-12 text-center text-xs text-slate-500">
+        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <div>
+            <strong>Penyusun Deskripsi Produk & Copywriting Marketplace</strong> — AI Powered
+          </div>
+          <div className="text-slate-400">
+            Siap pakai untuk Shopee · Tokopedia · TikTok Shop · Lazada
+          </div>
+        </div>
+      </footer>
     </div>
   );
-};
+}
