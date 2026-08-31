@@ -5,7 +5,7 @@ import { OutputDisplay } from './components/OutputDisplay';
 import { MarketplaceTips } from './components/MarketplaceTips';
 import { HistoryList } from './components/HistoryList';
 import { TargetMarketplace, ToneOfVoice, GeneratedDescription } from './types';
-import { Sparkles, Shield, CheckCircle2, ShoppingBag, User, LogOut, Lock, X } from 'lucide-react';
+import { Sparkles, CheckCircle2, User, LogOut, Lock, X } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 // ==========================================
@@ -182,15 +182,21 @@ export default function App() {
     const systemPrompt = `Anda adalah Copywriter E-commerce dan Pakar SEO Marketplace profesional (Shopee, Tokopedia, TikTok Shop, Lazada).
 Tugas Anda adalah membuat deskripsi produk lengkap, persuasif, dan SEO-friendly.
 
-PENTING: Berikan output HANYA dalam format JSON valid tanpa tanda backtick markdown (\`\`\`json). Format JSON harus persis seperti ini:
+Format balasan WAJIB berupa JSON murni dengan struktur berikut:
 {
-  "seoTitles": ["Judul SEO Opsi 1", "Judul SEO Opsi 2"],
-  "hook": "Kalimat pembuka persuasif yang menyorot keunggulan produk (2-3 kalimat)",
-  "features": ["Manfaat/Keunggulan 1", "Manfaat/Keunggulan 2", "Manfaat/Keunggulan 3", "Manfaat/Keunggulan 4"],
-  "packageContents": ["Isi paket 1", "Isi paket 2"],
-  "shippingNotes": "Ketentuan pengiriman, garansi, dan syarat video unboxing",
-  "hashtags": ["#tag1", "#tag2", "#tag3", "#tag4", "#tag5"],
-  "rawContent": "Teks deskripsi lengkap gabungan yang siap disalin langsung ke marketplace"
+  "titleOptions": ["Judul SEO Opsi 1", "Judul SEO Opsi 2"],
+  "hook": "Kalimat pembuka/hook persuasif yang memikat pembeli dalam 2-3 kalimat",
+  "keyBenefits": [
+    {"feature": "Fitur/Bahan 1", "benefit": "Manfaat nyata bagi pembeli"},
+    {"feature": "Fitur/Bahan 2", "benefit": "Manfaat nyata bagi pembeli"},
+    {"feature": "Fitur/Bahan 3", "benefit": "Manfaat nyata bagi pembeli"}
+  ],
+  "packageContents": ["1x Unit Produk Utama", "1x Dus/Kemasan Eksklusif"],
+  "shippingAndNotes": [
+    "Pesanan sebelum pukul 15.00 WIB dikirim pada hari yang sama.",
+    "Wajib menyertakan video unboxing utuh untuk klaim garansi retur."
+  ],
+  "hashtags": ["#tag1", "#tag2", "#tag3", "#tag4", "#tag5"]
 }`;
 
     const userPrompt = `Nama Produk: ${productName.trim()}\nSpesifikasi/Fitur: ${specifications.trim()}\nMarketplace Tujuan: ${marketplace}\nGaya Bahasa: ${tone}`;
@@ -233,18 +239,56 @@ PENTING: Berikan output HANYA dalam format JSON valid tanpa tanda backtick markd
         parsedData = JSON.parse(cleaned);
       }
 
+      const titles: string[] = Array.isArray(parsedData.titleOptions) && parsedData.titleOptions.length > 0 
+        ? parsedData.titleOptions 
+        : [`${productName} Premium Original Quality`, `Promo ${productName} - Garansi & Fast Delivery`];
+
+      const hookText: string = parsedData.hook || `Dapatkan ${productName} kualitas terbaik dengan performa maksimal untuk kebutuhan Anda!`;
+
+      const benefits = Array.isArray(parsedData.keyBenefits) && parsedData.keyBenefits.length > 0
+        ? parsedData.keyBenefits
+        : [{ feature: "Kualitas Premium", benefit: "Awet, nyaman, dan tahan lama untuk penggunaan harian" }];
+
+      const packages: string[] = Array.isArray(parsedData.packageContents) && parsedData.packageContents.length > 0
+        ? parsedData.packageContents
+        : ["1x Unit Produk", "1x Dus / Kemasan Pelindung"];
+
+      const shipping: string[] = Array.isArray(parsedData.shippingAndNotes) && parsedData.shippingAndNotes.length > 0
+        ? parsedData.shippingAndNotes
+        : ["Pesanan sebelum pukul 15.00 WIB dikirim pada hari yang sama.", "Wajib menyertakan video unboxing utuh untuk klaim garansi."];
+
+      const tags: string[] = Array.isArray(parsedData.hashtags) && parsedData.hashtags.length > 0
+        ? parsedData.hashtags
+        : [`#${productName.replace(/\s+/g, '')}`, `#${marketplace.replace(/\s+/g, '')}`, '#belanjaonline', '#racuntoko'];
+
+      // Format teks mentah rapi siap salin
+      const rawFormattedText = `${titles[0]}
+
+${hookText}
+
+✨ KEUNGGULAN & SPESIFIKASI:
+${benefits.map((b: any) => `• ${b.feature}: ${b.benefit}`).join('\n')}
+
+📦 KELENGKAPAN PAKET:
+${packages.map((p: string) => `• ${p}`).join('\n')}
+
+🚚 KETENTUAN PENGIRIMAN & GARANSI:
+${shipping.map((s: string) => `• ${s}`).join('\n')}
+
+${tags.join(' ')}`;
+
       const generatedData: GeneratedDescription = {
         productName: productName.trim(),
         marketplace,
         tone,
-        createdAt: new Date().toISOString(),
-        rawContent: parsedData.rawContent || contentString,
-        seoTitles: parsedData.seoTitles || [`${productName} Premium Original`],
-        hook: parsedData.hook || '',
-        features: parsedData.features || [],
-        packageContents: parsedData.packageContents || [],
-        shippingNotes: parsedData.shippingNotes || 'Pesanan sebelum jam 15.00 dikirim hari yang sama. Wajib video unboxing.',
-        hashtags: parsedData.hashtags || []
+        generatedAt: new Date().toISOString(),
+        titleOptions: titles,
+        hook: hookText,
+        keyBenefits: benefits,
+        packageContents: packages,
+        shippingAndNotes: shipping,
+        hashtags: tags,
+        fullFormattedCopy: rawFormattedText
       };
 
       setGeneratedResult(generatedData);
@@ -263,7 +307,6 @@ PENTING: Berikan output HANYA dalam format JSON valid tanpa tanda backtick markd
       setIsLoading(false);
     }
   };
-
 
   const isPro = userProfile?.is_subscribed;
   const credits = userProfile?.free_credits ?? 0;
