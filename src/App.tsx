@@ -197,16 +197,15 @@ Call-to-Action (CTA) untuk checkout serta imbauan video unboxing.
 5-8 hashtag populer sesuai kategori produk.`;
 
     const userPrompt = `Nama Produk: ${productName.trim()}\nSpesifikasi: ${specifications.trim()}\nMarketplace: ${marketplace}\nGaya Bahasa: ${tone}`;
-
     try {
       const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${GROQ_API_KEY}`
+          "Authorization": "Bearer " + GROQ_API_KEY.trim()
         },
         body: JSON.stringify({
-          model: "llama-3.1-8b-instant",
+          model: "llama-3.3-70b-versatile",
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt }
@@ -224,8 +223,9 @@ Call-to-Action (CTA) untuk checkout serta imbauan video unboxing.
       const rawText = result.choices?.[0]?.message?.content;
 
       if (!rawText) {
-        throw new Error('Respon dari AI kosong. Silakan coba kembali.');
+        throw new Error('Respon AI kosong.');
       }
+
 
       const generatedData: GeneratedDescription = {
         productName: productName.trim(),
