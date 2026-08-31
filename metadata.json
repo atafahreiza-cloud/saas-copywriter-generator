@@ -1,0 +1,6 @@
+{
+  "name": "Penyusun Deskripsi Produk & Copywriting Marketplace",
+  "description": "Aplikasi penyusun deskripsi produk dan copywriting marketplace terstruktur berbasis AI untuk Shopee, Tokopedia, TikTok Shop, dan Lazada.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
