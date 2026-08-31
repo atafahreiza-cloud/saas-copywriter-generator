@@ -206,7 +206,7 @@ Call-to-Action (CTA) untuk checkout serta imbauan video unboxing.
           "Authorization": `Bearer ${GROQ_API_KEY}`
         },
         body: JSON.stringify({
-          model: "mixtral-8x7b-32768",
+          model: "llama-3.1-8b-instant",
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt }
