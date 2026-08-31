@@ -13,7 +13,7 @@ import { createClient } from '@supabase/supabase-js';
 // ==========================================
 const SUPABASE_URL = "https://rrwjmcmrkbplnwtgzyfv.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_2748X2cPhj_GjSmtrSzN0A_OBdj0dCv";
-const GEMINI_API_KEY = "AQ.Ab8RN6IgVUw_i-t7Obp3EoC5veHDRnx7WpR4KsQF6tJaZcVb7g";
+const GROQ_API_KEY = "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";
 const MAYAR_PAYMENT_LINK = "https://copywriting-for-umkm.myr.id/pl/copywriting-generator-for-product-marketplace";
 // ==========================================
 
@@ -153,14 +153,12 @@ export default function App() {
   };
 
   const handleGenerate = async () => {
-    // 1. Cek Login
     if (!currentUser) {
       setShowAuthModal(true);
       setError('Silakan Login atau Daftar akun gratis terlebih dahulu.');
       return;
     }
 
-    // 2. Cek Status Langganan / Kuota
     const isPro = userProfile?.is_subscribed;
     const credits = userProfile?.free_credits ?? 0;
 
@@ -201,35 +199,32 @@ Call-to-Action (CTA) untuk checkout serta imbauan video unboxing.
     const userPrompt = `Nama Produk: ${productName.trim()}\nSpesifikasi: ${specifications.trim()}\nMarketplace: ${marketplace}\nGaya Bahasa: ${tone}`;
 
     try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-goog-api-key': GEMINI_API_KEY
-          },
-          body: JSON.stringify({
-            contents: [
-              {
-                role: 'user',
-                parts: [{ text: systemPrompt + '\n\nData Produk:\n' + userPrompt }]
-              }
-            ]
-          })
-        }
-      );
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${GROQ_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt }
+          ],
+          temperature: 0.7
+        })
+      });
 
       const result = await response.json();
 
       if (result.error) {
-        throw new Error(result.error.message || 'Gagal terhubung ke Gemini API.');
+        throw new Error(result.error.message || 'Gagal memproses ke AI.');
       }
 
-      const rawText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+      const rawText = result.choices?.[0]?.message?.content;
 
       if (!rawText) {
-        throw new Error('Respon dari Gemini AI kosong. Silakan coba kembali.');
+        throw new Error('Respon dari AI kosong. Silakan coba kembali.');
       }
 
       const generatedData: GeneratedDescription = {
@@ -308,7 +303,6 @@ Call-to-Action (CTA) untuk checkout serta imbauan video unboxing.
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        
         {/* Banner Paywall jika Kuota Habis */}
         {currentUser && !isPro && credits <= 0 && (
           <div className="mb-6 bg-gradient-to-r from-amber-500 to-orange-500 text-white p-5 rounded-2xl shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -423,7 +417,7 @@ Call-to-Action (CTA) untuk checkout serta imbauan video unboxing.
       <footer className="border-t border-slate-200 bg-white py-4 mt-12 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div>
-            <strong>Penyusun Deskripsi Produk & Copywriting Marketplace</strong> — Didukung oleh Gemini AI
+            <strong>Penyusun Deskripsi Produk & Copywriting Marketplace</strong> — AI Powered
           </div>
           <div className="text-slate-400">
             Siap pakai untuk Shopee · Tokopedia · TikTok Shop · Lazada
