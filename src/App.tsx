@@ -13,7 +13,7 @@ import { createClient } from '@supabase/supabase-js';
 // ==========================================
 const SUPABASE_URL = "https://rrwjmcmrkbplnwtgzyfv.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_2748X2cPhj_GjSmtrSzN0A_OBdj0dCv";
-const GEMINI_API_KEY = "AQ.Ab8RN6JmzzPs-qpWgfJvQauISdv2_cV9D8HXar57OOxqqfWkoA";
+const GEMINI_API_KEY = "AQ.Ab8RN6lgVUw_i-t7Obp3EoC5veHDRnx7WpR4KsQF6tJaZcVb7g";
 const MAYAR_PAYMENT_LINK = "https://copywriting-for-umkm.myr.id/pl/copywriting-generator-for-product-marketplace";
 // ==========================================
 
@@ -184,22 +184,32 @@ export default function App() {
     const systemPrompt = `Anda adalah Copywriter E-commerce dan Pakar SEO Marketplace profesional (Shopee, Tokopedia, TikTok Shop, Lazada).
 Tugas Anda adalah mengubah data produk mentah dari penjual menjadi deskripsi produk yang menarik, persuasif, terstruktur rapi, dan ramah algoritma pencarian.
 
-Kembalikan hasil dalam format teks rapi dengan struktur:
-1. REKOMENDASI JUDUL PRODUK (2 Opsi SEO)
-2. HOOK & OPENING
-3. SPESIFIKASI & KEUNGGULAN UTAMA (Fitur -> Manfaat)
-4. KELENGKAPAN PAKET
-5. KETENTUAN PENGIRIMAN & GARANSI
-6. HASHTAG RELEVAN`;
+Format Output WAJIB menggunakan struktur berikut:
+1. REKOMENDASI JUDUL PRODUK (SEO-Friendly):
+Berikan 2 alternatif judul menggunakan rumus: [Jenis Produk/Kategori] + [Merek/Nama Model] + [Fitur Utama/Spesifikasi] + [Keunggulan/Target].
+2. HOOK / OPENING (2-3 Kalimat):
+Sorot masalah utama pembeli atau nilai jual unik (USP) produk.
+3. SPESIFIKASI & KEUNGGULAN UTAMA (Bullet Points):
+Ubah fitur teknis menjadi manfaat nyata bagi pengguna (Fitur -> Manfaat).
+4. KELENGKAPAN PAKET / ISI KEMASAN:
+Daftar isi dalam kemasan jika relevan.
+5. CATATAN & KETENTUAN PENGIRIMAN/GARANSI:
+Call-to-Action (CTA) untuk checkout serta imbauan video unboxing.
+6. HASHTAG RELEVAN:
+5-8 hashtag populer sesuai kategori produk.`;
 
     const userPrompt = `Nama Produk: ${productName.trim()}\nSpesifikasi: ${specifications.trim()}\nMarketplace: ${marketplace}\nGaya Bahasa: ${tone}`;
 
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${GEMINI_API_KEY}`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${GEMINI_API_KEY}`,
+          'x-goog-api-key': GEMINI_API_KEY
+        },
         body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: systemPrompt + "\n\n" + userPrompt }] }]
+          contents: [{ role: 'user', parts: [{ text: systemPrompt + "\n\nData Produk:\n" + userPrompt }] }]
         })
       });
 
@@ -207,10 +217,9 @@ Kembalikan hasil dalam format teks rapi dengan struktur:
       const rawText = result.candidates?.[0]?.content?.parts?.[0]?.text;
 
       if (!rawText) {
-        throw new Error('Gagal menghasilkan respon dari Gemini AI.');
+        throw new Error(result.error?.message || 'Gagal menghasilkan respon dari Gemini AI.');
       }
 
-      // Bangun struktur data sesuai interface GeneratedDescription
       const generatedData: GeneratedDescription = {
         productName: productName.trim(),
         marketplace,
@@ -232,7 +241,6 @@ Kembalikan hasil dalam format teks rapi dengan struktur:
       saveToHistory(generatedData);
       showToast('Deskripsi produk berhasil disusun!');
 
-      // Potong 1 kredit jika free user
       if (!isPro && credits > 0) {
         const newCredits = credits - 1;
         await supabase.from('profiles').update({ free_credits: newCredits }).eq('id', currentUser.id);
