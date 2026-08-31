@@ -201,23 +201,35 @@ Call-to-Action (CTA) untuk checkout serta imbauan video unboxing.
     const userPrompt = `Nama Produk: ${productName.trim()}\nSpesifikasi: ${specifications.trim()}\nMarketplace: ${marketplace}\nGaya Bahasa: ${tone}`;
 
     try {
-      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent", {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${GEMINI_API_KEY}`,
-          'x-goog-api-key': GEMINI_API_KEY
-        },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: systemPrompt + "\n\nData Produk:\n" + userPrompt }] }]
-        })
-      });
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': GEMINI_API_KEY
+          },
+          body: JSON.stringify({
+            contents: [
+              {
+                role: 'user',
+                parts: [{ text: systemPrompt + '\n\nData Produk:\n' + userPrompt }]
+              }
+            ]
+          })
+        }
+      );
 
       const result = await response.json();
+
+      if (result.error) {
+        throw new Error(result.error.message || 'Gagal terhubung ke Gemini API.');
+      }
+
       const rawText = result.candidates?.[0]?.content?.parts?.[0]?.text;
 
       if (!rawText) {
-        throw new Error(result.error?.message || 'Gagal menghasilkan respon dari Gemini AI.');
+        throw new Error('Respon dari Gemini AI kosong. Silakan coba kembali.');
       }
 
       const generatedData: GeneratedDescription = {
