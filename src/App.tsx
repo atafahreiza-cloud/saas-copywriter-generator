@@ -180,29 +180,27 @@ export default function App() {
     setError(null);
 
     const systemPrompt = `Anda adalah Copywriter E-commerce dan Pakar SEO Marketplace profesional (Shopee, Tokopedia, TikTok Shop, Lazada).
-Tugas Anda adalah mengubah data produk mentah dari penjual menjadi deskripsi produk yang menarik, persuasif, terstruktur rapi, dan ramah algoritma pencarian.
+Tugas Anda adalah membuat deskripsi produk lengkap, persuasif, dan SEO-friendly.
 
-Format Output WAJIB menggunakan struktur berikut:
-1. REKOMENDASI JUDUL PRODUK (SEO-Friendly):
-Berikan 2 alternatif judul menggunakan rumus: [Jenis Produk/Kategori] + [Merek/Nama Model] + [Fitur Utama/Spesifikasi] + [Keunggulan/Target].
-2. HOOK / OPENING (2-3 Kalimat):
-Sorot masalah utama pembeli atau nilai jual unik (USP) produk.
-3. SPESIFIKASI & KEUNGGULAN UTAMA (Bullet Points):
-Ubah fitur teknis menjadi manfaat nyata bagi pengguna (Fitur -> Manfaat).
-4. KELENGKAPAN PAKET / ISI KEMASAN:
-Daftar isi dalam kemasan jika relevan.
-5. CATATAN & KETENTUAN PENGIRIMAN/GARANSI:
-Call-to-Action (CTA) untuk checkout serta imbauan video unboxing.
-6. HASHTAG RELEVAN:
-5-8 hashtag populer sesuai kategori produk.`;
+PENTING: Berikan output HANYA dalam format JSON valid tanpa tanda backtick markdown (\`\`\`json). Format JSON harus persis seperti ini:
+{
+  "seoTitles": ["Judul SEO Opsi 1", "Judul SEO Opsi 2"],
+  "hook": "Kalimat pembuka persuasif yang menyorot keunggulan produk (2-3 kalimat)",
+  "features": ["Manfaat/Keunggulan 1", "Manfaat/Keunggulan 2", "Manfaat/Keunggulan 3", "Manfaat/Keunggulan 4"],
+  "packageContents": ["Isi paket 1", "Isi paket 2"],
+  "shippingNotes": "Ketentuan pengiriman, garansi, dan syarat video unboxing",
+  "hashtags": ["#tag1", "#tag2", "#tag3", "#tag4", "#tag5"],
+  "rawContent": "Teks deskripsi lengkap gabungan yang siap disalin langsung ke marketplace"
+}`;
 
-    const userPrompt = `Nama Produk: ${productName.trim()}\nSpesifikasi: ${specifications.trim()}\nMarketplace: ${marketplace}\nGaya Bahasa: ${tone}`;
+    const userPrompt = `Nama Produk: ${productName.trim()}\nSpesifikasi/Fitur: ${specifications.trim()}\nMarketplace Tujuan: ${marketplace}\nGaya Bahasa: ${tone}`;
+
     try {
       const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": "Bearer " + GROQ_API_KEY.trim()
+          "Authorization": `Bearer ${GROQ_API_KEY}`
         },
         body: JSON.stringify({
           model: "openai/gpt-oss-120b",
@@ -210,7 +208,8 @@ Call-to-Action (CTA) untuk checkout serta imbauan video unboxing.
             { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt }
           ],
-          temperature: 0.7
+          temperature: 0.5,
+          response_format: { type: "json_object" }
         })
       });
 
@@ -220,28 +219,32 @@ Call-to-Action (CTA) untuk checkout serta imbauan video unboxing.
         throw new Error(result.error.message || 'Gagal memproses ke AI.');
       }
 
-      const rawText = result.choices?.[0]?.message?.content;
-
-      if (!rawText) {
-        throw new Error('Respon AI kosong.');
+      const contentString = result.choices?.[0]?.message?.content;
+      if (!contentString) {
+        throw new Error('Respon dari AI kosong.');
       }
 
+      // Parse JSON dari AI
+      let parsedData: any;
+      try {
+        parsedData = JSON.parse(contentString);
+      } catch {
+        const cleaned = contentString.replace(/```json/g, '').replace(/```/g, '').trim();
+        parsedData = JSON.parse(cleaned);
+      }
 
       const generatedData: GeneratedDescription = {
         productName: productName.trim(),
         marketplace,
         tone,
         createdAt: new Date().toISOString(),
-        rawContent: rawText,
-        seoTitles: [
-          `${productName} Premium Original Quality`,
-          `Promo ${productName} - Garansi & Fast Delivery`
-        ],
-        hook: "Solusi terbaik untuk melengkapi kebutuhan belanja Anda dengan kenyamanan maksimal!",
-        features: ["Bahan berkualitas tinggi", "Jahitan rapi & presisi", "Tahan lama untuk pemakaian harian"],
-        packageContents: ["1x Unit Produk", "1x Dus / Kemasan Eksklusif"],
-        shippingNotes: "Pesanan sebelum jam 15.00 dikirim di hari yang sama. Wajib video unboxing.",
-        hashtags: [`#${productName.replace(/\\s+/g, '')}`, `#${marketplace.replace(/\\s+/g, '')}`, '#belanjaonline', '#racunshopee', '#diskon']
+        rawContent: parsedData.rawContent || contentString,
+        seoTitles: parsedData.seoTitles || [`${productName} Premium Original`],
+        hook: parsedData.hook || '',
+        features: parsedData.features || [],
+        packageContents: parsedData.packageContents || [],
+        shippingNotes: parsedData.shippingNotes || 'Pesanan sebelum jam 15.00 dikirim hari yang sama. Wajib video unboxing.',
+        hashtags: parsedData.hashtags || []
       };
 
       setGeneratedResult(generatedData);
@@ -260,6 +263,7 @@ Call-to-Action (CTA) untuk checkout serta imbauan video unboxing.
       setIsLoading(false);
     }
   };
+
 
   const isPro = userProfile?.is_subscribed;
   const credits = userProfile?.free_credits ?? 0;
