@@ -13,7 +13,7 @@ import { createClient } from '@supabase/supabase-js';
 // ==========================================
 const SUPABASE_URL = "https://rrwjmcmrkbplnwtgzyfv.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_2748X2cPhj_GjSmtrSzN0A_OBdj0dCv";
-const GEMINI_API_KEY = "AQ.Ab8RN6lgVUw_i-t7Obp3EoC5veHDRnx7WpR4KsQF6tJaZcVb7g";
+const GEMINI_API_KEY = "AQ.Ab8RN6IgVUw_i-t7Obp3EoC5veHDRnx7WpR4KsQF6tJaZcVb7g";
 const MAYAR_PAYMENT_LINK = "https://copywriting-for-umkm.myr.id/pl/copywriting-generator-for-product-marketplace";
 // ==========================================
 
@@ -201,7 +201,7 @@ Call-to-Action (CTA) untuk checkout serta imbauan video unboxing.
     const userPrompt = `Nama Produk: ${productName.trim()}\nSpesifikasi: ${specifications.trim()}\nMarketplace: ${marketplace}\nGaya Bahasa: ${tone}`;
 
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`, {
+      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent", {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
